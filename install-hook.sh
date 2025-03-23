@@ -10,7 +10,7 @@ mkdir -p "$HOOKS_DIR"
 HOOK_PATH="$HOOKS_DIR/prepare-commit-msg"
 
 # Download the hook script from remote URL
-curl -fsSL https://gist.githubusercontent.com/webpolis/c3bc7a457eae0111b5f608ad94faab4b/raw/d57151b13eb46a3ff8857953b823d6aafd6c5b11/prepare-commit-msg -o "$HOOK_PATH"
+curl -fsSL https://raw.githubusercontent.com/cyqlelabs/llm-commit-msg/refs/heads/main/prepare-commit-msg -o "$HOOK_PATH"
 
 # Make the hook executable
 chmod +x "$HOOK_PATH"
