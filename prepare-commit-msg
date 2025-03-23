@@ -1,0 +1,149 @@
+#!/bin/bash
+# AI-powered commit message generator (supports OpenAI and Groq)
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Skip if not a regular commit
+if [ -n "$COMMIT_SOURCE" ]; then
+    exit 0
+fi
+
+# Skip if a commit message was already provided
+if grep -v "^#" "$COMMIT_MSG_FILE" | grep -q "[^[:space:]]"; then
+    exit 0
+fi
+
+# Get API keys
+OPENAI_API_KEY=$(git config --get openai.apikey || echo $OPENAI_API_KEY)
+OPENAI_MODEL=$(git config --get openai.model || echo $OPENAI_MODEL)
+GROQ_API_KEY=$(git config --get groq.apikey || echo $GROQ_API_KEY)
+GROQ_MODEL=$(git config --get groq.model || echo $GROQ_MODEL)
+
+if [ -z "$OPENAI_API_KEY" ] && [ -z "$GROQ_API_KEY" ]; then
+    echo "No API key found for OpenAI or Groq."
+    exit 1
+fi
+
+# Get diff
+DIFF_FILE=$(mktemp)
+git diff --cached >"$DIFF_FILE"
+
+# Call the appropriate API
+echo "Generating commit message..."
+RESPONSE_FILE=$(mktemp)
+
+# Unified Python code for both APIs
+OPENAI_API_KEY="$OPENAI_API_KEY" GROQ_API_KEY="$GROQ_API_KEY" OPENAI_MODEL="$OPENAI_MODEL" GROQ_MODEL="$GROQ_MODEL" python3 <<EOF >/dev/null
+import os
+import json
+import requests
+
+# Read the diff
+with open("$DIFF_FILE", "r") as f:
+    diff_content = f.read()
+
+# Determine which API to use
+groq_api_key = os.environ.get('GROQ_API_KEY')
+groq_model = os.environ.get('GROQ_MODEL')
+openai_api_key = os.environ.get('OPENAI_API_KEY')
+openai_model = os.environ.get('OPENAI_MODEL')
+
+if groq_api_key:
+    # Use Groq API
+    api_key = groq_api_key
+    endpoint = "https://api.groq.com/openai/v1/chat/completions"
+    model = groq_model
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": f"Generate a concise and meaningful commit message following the Conventional Commit specification <type>(optional scope): <description> for the given code changes."
+            },
+            {
+                "role": "user",
+                "content": f"Generate a commit message for these changes:\n\n{diff_content}"
+            },
+            {
+                "role": "user",
+                "content": f"Avoid making any other comment. Just provide the final commit message."
+            }
+        ],
+        "model": model,
+        "temperature": 0.10,
+        "max_completion_tokens": 4096,
+        "top_p": 0.95,
+        "stream": False,
+        "stop": None
+    }
+else:
+    # Use OpenAI API
+    api_key = openai_api_key
+    endpoint = "https://api.openai.com/v1/chat/completions"
+    model = openai_model 
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    data = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": f"Generate a concise and meaningful commit message following the Conventional Commit specification <type>(optional scope): <description> for the given code changes."
+            },
+            {
+                "role": "user",
+                "content": f"Generate a commit message for these changes:\n\n{diff_content}"
+            },
+            {
+                "role": "user",
+                "content": f"Avoid making any other comment. Just provide the final commit message."
+            }
+        ],
+    }
+
+# Make the API call
+response = requests.post(endpoint, headers=headers, json=data)
+
+# Save the response
+with open("$RESPONSE_FILE", "w") as f:
+    f.write(response.text)
+EOF
+
+# Check if there was an error
+if grep -q "Error:" "$RESPONSE_FILE"; then
+    echo "Failed to call API:"
+    cat "$RESPONSE_FILE"
+    rm "$DIFF_FILE" "$RESPONSE_FILE"
+    exit 1
+fi
+
+# Extract commit message
+COMMIT_MSG=$(python3 -c "
+import json
+with open('$RESPONSE_FILE', 'r') as f:
+    try:
+        response = json.load(f)
+        if 'choices' in response and len(response['choices']) > 0:
+            print(response['choices'][0]['message']['content'])
+        else:
+            print('Failed to generate commit message')
+    except Exception as e:
+        print(f'Error parsing response: {e}')
+")
+
+# Use the generated message
+if [ -n "$COMMIT_MSG" ] && [ "$COMMIT_MSG" != "Failed to generate commit message" ]; then
+    echo "$COMMIT_MSG" >"$COMMIT_MSG_FILE"
+    echo "Commit message generated successfully."
+else
+    echo "Failed to generate commit message."
+fi
+
+# Clean up
+rm "$DIFF_FILE" "$RESPONSE_FILE"
