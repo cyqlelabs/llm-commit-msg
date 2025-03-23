@@ -38,16 +38,17 @@ OPENAI_API_KEY="$OPENAI_API_KEY" GROQ_API_KEY="$GROQ_API_KEY" OPENAI_MODEL="$OPE
 import os
 import json
 import requests
+import sys
 
 # Read the diff
 with open("$DIFF_FILE", "r") as f:
     diff_content = f.read()
 
 # Determine which API to use
-groq_api_key = os.environ.get('GROQ_API_KEY')
-groq_model = os.environ.get('GROQ_MODEL')
-openai_api_key = os.environ.get('OPENAI_API_KEY')
-openai_model = os.environ.get('OPENAI_MODEL')
+groq_api_key = os.environ.get('GROQ_API_KEY') or None
+groq_model = os.environ.get('GROQ_MODEL') or None
+openai_api_key = os.environ.get('OPENAI_API_KEY') or None
+openai_model = os.environ.get('OPENAI_MODEL') or None
 
 if groq_api_key:
     # Use Groq API
@@ -80,7 +81,7 @@ if groq_api_key:
         "stream": False,
         "stop": None
     }
-else:
+elif openai_api_key:
     # Use OpenAI API
     api_key = openai_api_key
     endpoint = "https://api.openai.com/v1/chat/completions"
@@ -106,6 +107,10 @@ else:
             }
         ],
     }
+else:
+    print("No LLM was configured")
+
+    sys.exit()
 
 # Make the API call
 response = requests.post(endpoint, headers=headers, json=data)
