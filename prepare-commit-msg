@@ -113,11 +113,17 @@ else:
     sys.exit()
 
 # Make the API call
-response = requests.post(endpoint, headers=headers, json=data)
+try:
+    response = requests.post(endpoint, headers=headers, json=data)
+    response.raise_for_status()  # Raise exception for 4XX/5XX responses
 
-# Save the response
-with open("$RESPONSE_FILE", "w") as f:
-    f.write(response.text)
+    # Save the response
+    with open("$RESPONSE_FILE", "w") as f:
+        f.write(response.text)
+except Exception as e:
+    # Write error message to response file
+    with open("$RESPONSE_FILE", "w") as f:
+        f.write(f"Error: API request failed - {str(e)}")
 EOF
 
 # Check if there was an error
@@ -131,11 +137,21 @@ fi
 # Extract commit message
 COMMIT_MSG=$(python3 -c "
 import json
+import re
+
 with open('$RESPONSE_FILE', 'r') as f:
     try:
         response = json.load(f)
         if 'choices' in response and len(response['choices']) > 0:
-            print(response['choices'][0]['message']['content'])
+            content = response['choices'][0]['message']['content']
+
+            # Remove <think>...</think> sections if present
+            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+
+            # Trim whitespace
+            content = content.strip()
+
+            print(content)
         else:
             print('Failed to generate commit message')
     except Exception as e:
