@@ -25,8 +25,8 @@ git config openai.model "$openai_model"
 read -p "Enter Groq API key: " groq_apikey
 git config groq.apikey "$groq_apikey"
 
-read -p "Enter Groq model [qwen-2.5-coder-32b]: " groq_model
-groq_model=${groq_model:-qwen-2.5-coder-32b}
+read -p "Enter Groq model [qwen-qwq-32b]: " groq_model
+groq_model=${groq_model:-qwen-qwq-32b}
 git config groq.model "$groq_model"
 
 echo "Hook installed successfully at $HOOK_PATH"
